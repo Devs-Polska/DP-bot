@@ -22,12 +22,15 @@ users = {}
 
 def post_stats(client: SocketModeClient):
     sorted_channels = {k: v for k, v in sorted(channels.items(), key=lambda item: item[1])}
-    message = "--------------\n"
-    message += "last hour\n"
+    message_lines = ["--------------", "last hour"]
     for channel_id, number in list(sorted_channels.items())[-top_n:].__reversed__():
         channel_name = client.web_client.conversations_info(channel=channel_id)['channel']['name']
-        message += f'{channel_name}: {number}\n'
-    client.web_client.chat_postMessage(channel=stats_channel_id, text=message)
+        message_lines.append(f'{channel_name}: {number}')
+
+    if len(message_lines) == 2:
+        message_lines = ["--------------", "no messages in last hour"]
+
+    client.web_client.chat_postMessage(channel=stats_channel_id, text="\n".join(message_lines))
     channels.clear()
     users.clear()
 
