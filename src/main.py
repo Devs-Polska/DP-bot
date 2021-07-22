@@ -15,7 +15,7 @@ socket_token = os.getenv('SLACK_SOCKET_TOKEN')
 http_token = os.getenv("SLACK_HTTP_TOKEN")
 stats_channel_id = 'C028X1XUVKN'
 
-top_n = 3
+top_n = 5
 channels = {}
 users = {}
 
