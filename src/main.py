@@ -2,48 +2,16 @@ import logging
 import os
 import time
 
+
 import schedule
 from slack_sdk.socket_mode import SocketModeClient
 from slack_sdk.socket_mode.request import SocketModeRequest
 from slack_sdk.socket_mode.response import SocketModeResponse
 from slack_sdk.web import WebClient
 
-logger = logging.getLogger('dp-stats')
-logger.setLevel(logging.DEBUG)
-
-socket_token = os.getenv('SLACK_SOCKET_TOKEN')
-http_token = os.getenv("SLACK_HTTP_TOKEN")
-stats_channel_id = 'C028X1XUVKN'
-
-top_n = 5
-channels = {}
-users = {}
-
-
-def post_stats(client: SocketModeClient):
-    sorted_channels = {k: v for k, v in sorted(channels.items(), key=lambda item: item[1])}
-    message_lines = ["--------------", "last hour"]
-    for channel_id, number in list(sorted_channels.items())[-top_n:].__reversed__():
-        channel_name = client.web_client.conversations_info(channel=channel_id)['channel']['name']
-        message_lines.append(f'{channel_name}: {number}')
-
-    if len(message_lines) == 2:
-        message_lines = ["--------------", "no messages in last hour"]
-
-    client.web_client.chat_postMessage(channel=stats_channel_id, text="\n".join(message_lines))
-    channels.clear()
-    users.clear()
-
-
-def new_message(user, channel):
-    if channel in channels:
-        channels[channel] += 1
-    else:
-        channels[channel] = 1
-    if user in users:
-        users[user] += 1
-    else:
-        users[user] = 1
+from config import STATS_DIR, http_token, socket_token, LOG_DIR, ERROR_LOG_FILE, LOG_FILE
+from logger import logger, add_file_logger, add_error_file_logger, add_console_logger
+from stats import handle_message, post_stats
 
 
 def process(client: SocketModeClient, req: SocketModeRequest):
@@ -51,27 +19,31 @@ def process(client: SocketModeClient, req: SocketModeRequest):
         response = SocketModeResponse(envelope_id=req.envelope_id)
         client.send_socket_mode_response(response)
     if req.payload['event']['type'] == 'message':
-        message = req.payload['event']['text']
-        channel_id = req.payload['event']['channel']
-        user_id = req.payload['event']['user']
-        if channel_id != stats_channel_id:
-            new_message(user_id, channel_id)
-            channel_name = client.web_client.conversations_info(channel=channel_id)['channel']['name']
-            user_name = client.web_client.users_info(user=user_id)['user']['profile']['display_name']
-            logger.info(f'[{channel_name}] {user_name}: {message}')
+        handle_message(req, client)
 
 
-def add_console_logger(level):
-    ch = logging.StreamHandler()
-    ch.setLevel(level)
-    formatter = logging.Formatter('[%(levelname)s] %(message)s')
-    ch.setFormatter(formatter)
-    logger.addHandler(ch)
+def create_dirs():
+    if not os.path.isdir(LOG_DIR):
+        logger.debug(f'Creating log dir in:{LOG_DIR}')
+        os.mkdir(LOG_DIR)
+        logger.debug('Created')
+    else:
+        logger.debug(f'LOG_DIR={LOG_DIR}')
+    if not os.path.isdir(STATS_DIR):
+        logger.debug(f'Creating stats dir in:{STATS_DIR}')
+        os.mkdir(STATS_DIR)
+        logger.debug('Created')
+    else:
+        logger.debug(f'STATS_DIR={STATS_DIR}')
+    pass
 
 
 def main():
     add_console_logger(logging.DEBUG)
     logger.info('start')
+    create_dirs()
+    add_file_logger(LOG_FILE, logging.DEBUG)
+    add_error_file_logger(ERROR_LOG_FILE)
     web_client = WebClient(token=http_token)
     socket_client = SocketModeClient(
         app_token=socket_token,
