@@ -4,7 +4,6 @@ from slack_sdk.socket_mode import SocketModeClient
 
 from config import STATS_DIR
 from logger import logger
-from datetime import date
 
 top_n = 5
 channels = {}
@@ -14,12 +13,15 @@ stats_channel_id = 'C028X1XUVKN'
 
 def post_stats(client: SocketModeClient):
     sorted_channels = {k: v for k, v in sorted(channels.items(), key=lambda item: item[1])}
-    message_lines = ["--------------", "last hour"]
+    message_lines = ["--------------", f"last hour top {top_n}"]
+    messages_count = 0
     for channel_id, number in list(sorted_channels.items())[-top_n:].__reversed__():
         channel_name = client.web_client.conversations_info(channel=channel_id)['channel']['name']
         message_lines.append(f'{channel_name}: {number}')
+        messages_count += number
 
-    if len(message_lines) == 2:
+    message_lines.append(f"Messages count: {messages_count}")
+    if len(message_lines) == 3:
         message_lines = ["--------------", "no messages in last hour"]
 
     client.web_client.chat_postMessage(channel=stats_channel_id, text="\n".join(message_lines))
@@ -40,7 +42,7 @@ def new_message(user, channel):
 
 
 def save_message(timestamp, user_id, channel_id):
-    file_name = date.fromtimestamp(1628147197)
+    file_name = "stats.csv"
     path = f'{STATS_DIR}/{file_name}'
     with open(path, "a+") as f:
         csv.writer(f).writerow([timestamp, user_id, channel_id])
@@ -54,6 +56,6 @@ def handle_message(req, client):
     if channel_id != stats_channel_id:
         new_message(user_id, channel_id)
         channel_name = client.web_client.conversations_info(channel=channel_id)['channel']['name']
-        user_name = client.web_client.users_info(user=user_id)['user']['profile']['display_name']
+        user_name = client.web_client.users_info(user=user_id)['user']['profile']['display_name_normalized']
         save_message(timestamp, user_id, channel_id)
         logger.debug(f'[{channel_name}] {user_name}: {message}')
